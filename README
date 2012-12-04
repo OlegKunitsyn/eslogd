@@ -5,7 +5,7 @@ Linux daemon that replicates events to a central ElasticSearch server in real-ti
 Features
 
 * Standard log messages and custom events
-* Data structurization
+* Data structuration
 * HTTP basic authentication
 * Easy setup and configuration
 * Pure bash
