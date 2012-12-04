@@ -1,0 +1,39 @@
+# Log regex 
+# required
+REGEX='^(\S+) (\S+) (\S+) \[(\S+ \S+)\] \"(\S+) (.*?) (\S+)\/(\S+)\" (\S+) (\S+) "([^"]*)" "([^"]*)" "([^"]*)"$'
+
+# Log fields, space-separated <name>:<type> list. Default type - string
+# required
+FIELDS='host:string username password time:datetime method uri protocol version status bytes:integer referer agent vhost'
+
+# Logfile
+# required
+FILE=/var/log/apache/access.log
+
+# ElasticSearch index
+# required
+ES_DATABASE=test
+
+# ElasticSearch index type
+# required
+ES_TABLE=logs
+
+# ElasticSearch server host
+# required
+ES_HOST=localhost
+
+# ElasticSearch server port 
+# optional. Default 9200
+ES_PORT=9200
+
+# Size of the local buffer in seconds
+# optional. Default 2
+BUFFER_SIZE=2
+
+# HTTP AUTH username
+# optional. Default empty
+HTTP_USERNAME=
+
+# HTTP AUTH password
+# optional. Default empty
+HTTP_PASSWORD=

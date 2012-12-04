@@ -1,0 +1,212 @@
+#!/bin/bash
+#
+# Eslogd
+# Linux daemon that replicates events to a central ElasticSearch server in real-time
+#
+# @author Oleg Kunitsyn
+# @license Apache 2.0
+#
+### BEGIN INIT INFO
+# Provides:          eslogd
+# Required-Start:    
+# Required-Stop:     
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1
+# Short-Description: Start and stop eslogd daemon
+# Description:       Copies log lines to remote ElasticSearch server
+### END INIT INFO
+#
+
+CONFIGS="/etc/eslogd*.conf"
+PREFIX="/var/run/eslogd"
+NAME=`basename $0`
+
+# curl?
+if [ "$(curl --VERSION 2>/dev/null)" == "" ]
+then
+    echo "ERROR: curl command not found"
+    exit 1
+fi
+
+# sed?
+if [ "$(sed --version 2>/dev/null)" == "" ]
+then
+    echo "ERROR: sed command not found"
+    exit 1
+fi
+
+# tail?
+if [ "$(tail --version 2>/dev/null)" == "" ]
+then
+    echo "ERROR: tail command not found"
+    exit 1
+fi
+
+# Main process
+main () {
+    # Fetch config into field_names and field_types array
+    field_names=($FIELDS)
+    for i in ${!field_names[@]}
+    do
+        value=($(echo ${field_names[$i]} | sed -e 's/:/ /g'))
+        field_names[$i]=${value[0]}
+        field_types[$i]=${value[1]}
+    done
+
+    # Read single line in test mode
+    if [ "$TEST" == "1" ]
+    then
+        follow=''
+    else
+        follow='-f'
+    fi
+
+    # Init log reader
+    buffer=''
+    since=$(date +%s)
+    tail -n $TEST $follow $FILE | while read line
+    do
+        # Fetch line into record array
+        if [[ $line =~ $REGEX ]]
+        then
+            for(( i=1; i<${#BASH_REMATCH[@]}; i++ )) 
+            do
+                record[$i-1]=${BASH_REMATCH[$i]}
+            done
+        fi
+
+        # Add JSON header
+        buffer="$buffer"'{"index":{"_index":"'$ES_DATABASE'","_type":"'$ES_TABLE'"}}'"\n{"
+        for i in ${!field_names[@]}
+        do
+            value=${record[$i]}
+
+            # Convert data types
+            case ${field_types[$i]} in 
+                integer) 
+                    # Anyway to integer
+                    if [[ $value =~ ^[0-9]+$ ]]
+                    then
+                        :
+                    else 
+                        value=0
+                    fi
+                    ;;
+                datetime) 
+                    value=`echo $value | sed -e 's/[\/]/ /g' | sed -e 's/\ \([0-9]\{4\}\):/ \1 /g'`
+                    value='"'$(date --date="$value" "+%F %H:%M:%S %z")'"'
+                    ;;
+                *)
+                    # Escape double quotes
+                    value='"'$(echo $value | sed -e 's/"/\\"/g')'"'
+                    ;;
+            esac
+
+            # Add value
+            buffer=$(echo $buffer'"'${field_names[$i]}'":'$value)
+
+            # Add comma
+            if [ $i -ne $((${#field_names[@]}-1)) ]
+            then
+                buffer="$buffer,"
+            fi
+        done
+        buffer="$buffer}\n"
+
+        # Flush buffer
+        if [ "$TEST" == "1" ]
+        then
+            echo -e -n $buffer
+            exit 0
+        fi
+        now=$(date +%s)
+        if [ $BUFFER_SIZE -lt $(($now-$since)) ]
+        then
+            echo -e -n $buffer | curl -XPOST --connect-timeout $BUFFER_SIZE -s --show-error -u "$HTTP_USERNAME:$HTTP_PASSWORD" http://$ES_HOST:$ES_PORT/_bulk --data-binary @-
+            buffer=''
+            since=$now
+        fi
+    done
+}
+
+defaults () {
+	BUFFER_SIZE=2
+	ES_PORT=9200
+	HTTP_USERNAME=''
+	HTTP_PASSWORD=''
+}
+
+start () {
+    for config in $CONFIGS
+    do
+		pidfile=${PREFIX}_`basename $config`.pid
+		pid=`cat $pidfile 2>/dev/null`
+		if [ "$pid" != "" ] && kill -s 0 $pid 2>/dev/null
+        then
+			echo "$NAME $config is already running"
+		else
+			(
+				trap  "{ rm -f ${pidfile}; exit 1; }" EXIT
+				defaults
+				source $config
+				TEST=0
+				main
+				exit 0
+			) > /dev/null 2> >(logger -t "$NAME/$(basename $config)") &
+			echo $! > $pidfile
+			sleep 1
+			pid=`cat $pidfile 2>/dev/null`
+			if [ "$pid" != "" ]; then
+				echo "Started: $NAME $(basename $config)"
+			else
+				echo "Error: $NAME $(basename $config). See syslog for more information"
+			fi
+		fi
+	done
+}
+
+test () {
+    for config in $CONFIGS
+    do
+		echo "Configuration $(basename $config):"
+		defaults
+		source $config
+		TEST=1
+		main
+	done
+}
+
+stop () {
+    for config in $CONFIGS
+    do
+		pidfile=${PREFIX}_`basename $config`.pid
+		pid=`cat $pidfile 2>/dev/null`
+		if [ "$pid" == "" ]
+        then
+			echo "$NAME $(basename $config) is not running"
+		else
+			kill $pid
+			sleep 1
+			echo "Stopped: $NAME $(basename $config)"
+		fi
+	done
+	# Shutdown tail -f
+	echo -n "$NAME "
+	killall -q -s KILL $NAME
+}
+
+case $1 in
+	start)
+		start
+	;;
+	stop)
+		stop
+	;;
+	test)
+		test
+	;;
+	*)
+		echo "Usage: $0 {start|stop|test}"
+		exit 1
+	;;
+esac

@@ -1,0 +1,36 @@
+Eslogd
+
+Linux daemon that replicates events to a central ElasticSearch server in real-time
+
+Features
+
+* Standard log messages and custom events
+* Data structurization
+* HTTP basic authentication
+* Easy setup and configuration
+* Pure bash
+
+Requires
+
+* curl
+* sed
+* tail
+
+Installation
+
+* copy eslogd to /etc/init.d and make it executable
+* copy eslogd.apache.access.conf.sample to /etc/eslogd.myfirstlog.conf and fix it
+
+Test conf files
+
+* sudo /etc/init.d/eslogd test
+
+Start daemon
+
+* sudo /etc/init.d/eslogd start
+
+Stop daemon
+
+* sudo /etc/init.d/eslogd stop
+
+
