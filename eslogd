@@ -13,7 +13,7 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1
 # Short-Description: Start and stop eslogd daemon
-# Description:       Copies log lines to remote ElasticSearch server
+# Description:       Replicates events to a central ElasticSearch server
 ### END INIT INFO
 #
 
@@ -94,7 +94,7 @@ main () {
                     ;;
                 datetime) 
                     value=`echo $value | sed -e 's/[\/]/ /g' | sed -e 's/\ \([0-9]\{4\}\):/ \1 /g'`
-                    value='"'$(date --date="$value" "+%F %H:%M:%S %z")'"'
+                    value='"'$(date --date="$value" "+%FT%H:%M:%S")'"'
                     ;;
                 *)
                     # Escape double quotes
